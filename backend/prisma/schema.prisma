@@ -1,0 +1,226 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum SplitType {
+  EQUAL
+  UNEQUAL
+  PERCENTAGE
+  SHARE
+}
+
+enum ImportStatus {
+  PENDING
+  REVIEWING
+  COMPLETED
+  FAILED
+}
+
+enum RowStatus {
+  PENDING
+  IMPORTED
+  HELD
+  REJECTED
+  SKIPPED
+}
+
+enum AnomalyCode {
+  DUPLICATE_EXACT
+  AMOUNT_COMMA_FORMAT
+  AMOUNT_EXCESS_PRECISION
+  PAYER_LOWERCASE
+  PAYER_UNKNOWN
+  PAYER_MISSING
+  SETTLEMENT_AS_EXPENSE
+  PERCENTAGE_INVALID_SUM
+  DATE_FORMAT_INCONSISTENT
+  DATE_AMBIGUOUS
+  DATE_NONSTANDARD
+  PAYER_TRAILING_SPACE
+  CURRENCY_USD
+  AMOUNT_NEGATIVE
+  MEMBER_NOT_IN_GROUP
+  DUPLICATE_CONFLICTING
+  CURRENCY_MISSING
+  AMOUNT_SPACES
+  AMOUNT_ZERO
+  MEMBERSHIP_VIOLATION
+  SPLIT_TYPE_CONFLICT
+}
+
+enum AnomalyAction {
+  AUTO_FIXED
+  HELD_FOR_REVIEW
+  SKIPPED
+  REJECTED
+}
+
+model User {
+  id             String         @id @default(uuid())
+  name           String
+  username       String         @unique
+  email          String         @unique
+  passwordHash   String
+  isDeleted      Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  
+  // Relations
+  memberships    GroupMember[]
+  createdGroups  Group[]        @relation("GroupCreator")
+  paidExpenses   Expense[]      @relation("PaidExpenses")
+  createdExpenses Expense[]     @relation("CreatedExpenses")
+  sentSettlements Settlement[]   @relation("SentSettlements")
+  receivedSettlements Settlement[] @relation("ReceivedSettlements")
+  importSessions ImportSession[]
+  refreshTokens  RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+}
+
+model Group {
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  createdById   String
+  createdBy     User          @relation("GroupCreator", fields: [createdById], references: [id])
+  createdAt     DateTime      @default(now())
+  
+  // Relations
+  members       GroupMember[]
+  expenses      Expense[]
+  settlements   Settlement[]
+  importSessions ImportSession[]
+}
+
+model GroupMember {
+  groupId   String
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+
+  @@id([groupId, userId])
+}
+
+model Expense {
+  id            String         @id @default(uuid())
+  groupId       String
+  group         Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  description   String
+  amount        Decimal        @db.Decimal(12, 2)
+  currency      String         @default("INR")
+  exchangeRate  Decimal?       @db.Decimal(12, 4)
+  amountInr     Decimal        @db.Decimal(12, 2)
+  paidById      String
+  paidBy        User           @relation("PaidExpenses", fields: [paidById], references: [id])
+  splitType     SplitType
+  date          DateTime
+  notes         String?
+  csvRowNumber  Int?
+  createdById   String
+  createdBy     User           @relation("CreatedExpenses", fields: [createdById], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  splits        ExpenseSplit[]
+  importRows    ImportRow[]
+}
+
+model ExpenseSplit {
+  id          String   @id @default(uuid())
+  expenseId   String
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  userId      String
+  amountInr   Decimal  @db.Decimal(12, 2)
+  rawValue    String?  // original value for audit (e.g. "30%", "2", "equal")
+
+  @@unique([expenseId, userId])
+}
+
+model Settlement {
+  id            String      @id @default(uuid())
+  groupId       String
+  group         Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromUserId    String
+  fromUser      User        @relation("SentSettlements", fields: [fromUserId], references: [id])
+  toUserId      String
+  toUser        User        @relation("ReceivedSettlements", fields: [toUserId], references: [id])
+  amount        Decimal     @db.Decimal(12, 2)
+  date          DateTime
+  notes         String?
+  csvRowNumber  Int?
+  createdAt     DateTime    @default(now())
+  
+  importRows    ImportRow[]
+}
+
+model ImportSession {
+  id             String         @id @default(uuid())
+  groupId        String
+  group          Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  filename       String
+  uploadedById   String
+  uploadedBy     User           @relation(fields: [uploadedById], references: [id])
+  usdToInr       Decimal?       @db.Decimal(12, 4)
+  status         ImportStatus   @default(PENDING)
+  totalRows      Int            @default(0)
+  importedRows   Int            @default(0)
+  skippedRows    Int            @default(0)
+  heldRows       Int            @default(0)
+  createdAt      DateTime       @default(now())
+  completedAt    DateTime?
+
+  // Relations
+  rows           ImportRow[]
+  anomalies      ImportAnomaly[]
+}
+
+model ImportRow {
+  id             String         @id @default(uuid())
+  sessionId      String
+  session        ImportSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  rowNumber      Int
+  rawData        Json           // Untouched raw CSV row
+  status         RowStatus      @default(PENDING)
+  
+  expenseId      String?
+  expense        Expense?       @relation(fields: [expenseId], references: [id])
+  settlementId   String?
+  settlement     Settlement?    @relation(fields: [settlementId], references: [id])
+
+  // Relations
+  anomalies      ImportAnomaly[]
+}
+
+model ImportAnomaly {
+  id             String         @id @default(uuid())
+  sessionId      String
+  session        ImportSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  rowId          String?
+  row            ImportRow?     @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  rowNumber      Int
+  code           AnomalyCode
+  description    String
+  action         AnomalyAction
+  resolution     String?
+  resolvedAt     DateTime?
+}
