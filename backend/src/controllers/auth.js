@@ -205,23 +205,50 @@ async function me(req, res, next) {
   }
 }
 
-// Google OAuth Mock Controller
+// Google OAuth Mock / Real Controller
 async function oauthMock(req, res, next) {
   try {
-    const { email, name, googleId } = req.body;
+    const { email, name, googleId, idToken } = req.body;
 
-    if (!email || !name) {
+    let targetEmail = email;
+    let targetName = name;
+    let targetGoogleId = googleId;
+
+    if (idToken) {
+      // Real Google Token Verification via Google's tokeninfo API
+      try {
+        const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+        if (!verifyRes.ok) {
+          return res.status(400).json({ error: 'Invalid Google ID Token' });
+        }
+        const tokenInfo = await verifyRes.json();
+        
+        // Verify client ID if set and not placeholder
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        if (clientId && clientId !== 'your-google-client-id.apps.googleusercontent.com' && tokenInfo.aud !== clientId) {
+          return res.status(400).json({ error: 'Google Client ID mismatch' });
+        }
+
+        targetEmail = tokenInfo.email;
+        targetName = tokenInfo.name;
+        targetGoogleId = tokenInfo.sub;
+      } catch (err) {
+        return res.status(500).json({ error: 'Google token validation failed' });
+      }
+    }
+
+    if (!targetEmail || !targetName) {
       return res.status(400).json({ error: 'Email and Name are required for Google OAuth' });
     }
 
-    // Try finding the user by email, or username matching email prefix
+    // Try finding the user by email
     let user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() }
+      where: { email: targetEmail.toLowerCase().trim() }
     });
 
     if (!user) {
-      // Auto-register via mock Google OAuth
-      let username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      // Auto-register via Google OAuth
+      let username = targetEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
       
       // Handle collision
       let suffix = 1;
@@ -233,13 +260,13 @@ async function oauthMock(req, res, next) {
       username = checkUsername;
 
       // Mock password hash for OAuth users
-      const passwordHash = await bcrypt.hash(`oauth-mock-${googleId || Math.random()}`, 10);
+      const passwordHash = await bcrypt.hash(`oauth-${targetGoogleId || Math.random()}`, 10);
 
       user = await prisma.user.create({
         data: {
-          name,
+          name: targetName,
           username,
-          email: email.toLowerCase().trim(),
+          email: targetEmail.toLowerCase().trim(),
           passwordHash
         }
       });
