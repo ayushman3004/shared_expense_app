@@ -157,7 +157,25 @@ export default function GroupDashboard() {
             ← Back to Dashboard
           </Link>
           <h1 style={{ fontSize: '2.5rem', margin: '0 0 0.5rem 0' }}>{group.name}</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>{group.description || 'No description provided.'}</p>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>{group.description || 'No description provided.'}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <span 
+              className="badge badge-info" 
+              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }} 
+              onClick={() => setActiveTab('members')}
+              title="Click to view timeline settings"
+            >
+              <Users size={12} />
+              {group.members.length} members
+            </span>
+            <button 
+              onClick={() => { setSelectedMember(undefined); setMembersModalOpen(true); }}
+              className="btn btn-secondary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderRadius: '4px' }}
+            >
+              <Plus size={12} /> Add Member
+            </button>
+          </div>
         </div>
 
         {/* Dashboard statistics card */}

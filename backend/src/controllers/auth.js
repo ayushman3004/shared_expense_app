@@ -289,11 +289,85 @@ async function oauthMock(req, res, next) {
   }
 }
 
+// Update User Profile
+async function updateProfile(req, res, next) {
+  try {
+    const { name, username, email } = req.body;
+    const userId = req.user.id;
+
+    if (!name || !username || !email) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Check uniqueness if username or email is changing
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        id: { not: userId },
+        OR: [
+          { username: username.toLowerCase().trim() },
+          { email: email.toLowerCase().trim() }
+        ]
+      }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username or Email is already in use by another account' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name,
+        username: username.toLowerCase().trim(),
+        email: email.toLowerCase().trim()
+      }
+    });
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        username: updatedUser.username,
+        email: updatedUser.email
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// Soft-deactivate Account
+async function deactivateAccount(req, res, next) {
+  try {
+    const userId = req.user.id;
+
+    await prisma.$transaction(async (tx) => {
+      // Soft-delete user
+      await tx.user.update({
+        where: { id: userId },
+        data: { isDeleted: true }
+      });
+
+      // Clear refresh tokens
+      await tx.refreshToken.deleteMany({
+        where: { userId }
+      });
+    });
+
+    res.json({ message: 'Account deactivated successfully' });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   signup,
   login,
   refresh,
   logout,
   me,
-  oauthMock
+  oauthMock,
+  updateProfile,
+  deactivateAccount
 };

@@ -1,5 +1,5 @@
 const express = require('express');
-const { signup, login, refresh, logout, me, oauthMock } = require('../controllers/auth');
+const { signup, login, refresh, logout, me, oauthMock, updateProfile, deactivateAccount } = require('../controllers/auth');
 const { authenticate } = require('../middlewares/auth');
 
 const router = express.Router();
@@ -10,5 +10,7 @@ router.post('/refresh', refresh);
 router.post('/logout', logout);
 router.get('/me', authenticate, me);
 router.post('/oauth-mock', oauthMock);
+router.put('/profile', authenticate, updateProfile);
+router.delete('/profile', authenticate, deactivateAccount);
 
 module.exports = router;

@@ -6,11 +6,13 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import GroupDashboard from './pages/GroupDashboard';
 import ImportWizard from './pages/ImportWizard';
-import { LogOut, LayoutDashboard, User } from 'lucide-react';
+import ProfileModal from './components/ProfileModal';
+import { LogOut, LayoutDashboard, User, Settings } from 'lucide-react';
 import './App.css';
 
 function App() {
   const [auth, setAuth] = useState(() => getTokens());
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   // Watch for local storage updates or manually trigger success
   const syncAuth = () => {
@@ -47,10 +49,22 @@ function App() {
               </Link>
               
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', borderLeft: '1px solid var(--border-color)', paddingLeft: '1rem' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                <span 
+                  onClick={() => setProfileModalOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)', fontSize: '0.9rem', cursor: 'pointer' }}
+                  title="Edit Profile"
+                >
                   <User size={14} />
                   Hi, {auth.user?.name || 'User'}
                 </span>
+                <button
+                  onClick={() => setProfileModalOpen(true)}
+                  className="btn btn-secondary btn-sm"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem' }}
+                  title="Settings"
+                >
+                  <Settings size={14} />
+                </button>
                 <button
                   onClick={handleLogout}
                   className="btn btn-secondary btn-sm"
@@ -62,6 +76,18 @@ function App() {
               </div>
             </nav>
           </header>
+        )}
+
+        {profileModalOpen && (
+          <ProfileModal
+            isOpen={profileModalOpen}
+            onClose={() => setProfileModalOpen(false)}
+            onSuccess={() => {
+              setProfileModalOpen(false);
+              syncAuth();
+            }}
+            user={auth.user}
+          />
         )}
 
         <Routes>

@@ -155,12 +155,34 @@ async function addGroupMember(req, res, next) {
       return res.status(403).json({ error: 'Only group admins can add members' });
     }
 
-    const userToAdd = await prisma.user.findUnique({
+    let userToAdd = await prisma.user.findUnique({
       where: { username: username.toLowerCase().trim() }
     });
 
     if (!userToAdd) {
-      return res.status(404).json({ error: `User with username "${username}" not found` });
+      // Auto-create a shadow/temp user so the admin can add anyone on the fly
+      const name = username;
+      const cleanUsername = username.toLowerCase().trim();
+      const email = `${cleanUsername}@temp.spreetail.com`;
+      const bcrypt = require('bcryptjs');
+      const dummyPasswordHash = await bcrypt.hash('tempPassword123', 10);
+
+      // Check if email already exists
+      const existingUserByEmail = await prisma.user.findUnique({
+        where: { email }
+      });
+      if (existingUserByEmail) {
+        return res.status(400).json({ error: `Email "${email}" is already in use.` });
+      }
+
+      userToAdd = await prisma.user.create({
+        data: {
+          name,
+          username: cleanUsername,
+          email,
+          passwordHash: dummyPasswordHash
+        }
+      });
     }
 
     // Check if already a member
