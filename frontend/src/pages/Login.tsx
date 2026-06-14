@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, setTokens } from '../utils/api';
 import { LogIn } from 'lucide-react';
@@ -13,6 +13,51 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const handleGoogleCredentialResponse = async (response: any) => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const idToken = response.credential;
+      // POST the real ID token for backend Google verification
+      const data = await api.post('/auth/google', { idToken });
+      setTokens(data.accessToken, data.refreshToken, data.user);
+      onLoginSuccess();
+      navigate('/');
+    } catch (err: any) {
+      setError(err.message || 'Google OAuth verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const initGoogleSignIn = () => {
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'your-google-client-id.apps.googleusercontent.com';
+      
+      if (typeof window !== 'undefined' && (window as any).google) {
+        (window as any).google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleGoogleCredentialResponse,
+        });
+        (window as any).google.accounts.id.renderButton(
+          document.getElementById('googleSignInButton'),
+          {
+            theme: 'filled_blue',
+            size: 'large',
+            width: '100%',
+            text: 'signin_with',
+            shape: 'rectangular',
+          }
+        );
+      }
+    };
+
+    // Attempt to load. Retry after a small delay in case the async Google script is still initializing.
+    const timer = setTimeout(initGoogleSignIn, 600);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,31 +76,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Invalid username/email or password');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleMockGoogleLogin = async () => {
-    setLoading(true);
-    setError('');
-    
-    // Choose a random demo identity
-    const demoAccounts = [
-      { name: 'Aisha Mock', email: 'aisha_mock@example.com', googleId: 'g_12345' },
-      { name: 'Rohan Mock', email: 'rohan_mock@example.com', googleId: 'g_67890' },
-      { name: 'Guest User', email: 'guest@example.com', googleId: 'g_abcde' }
-    ];
-    
-    const account = demoAccounts[Math.floor(Math.random() * demoAccounts.length)];
-
-    try {
-      const data = await api.post('/auth/oauth-mock', account);
-      setTokens(data.accessToken, data.refreshToken, data.user);
-      onLoginSuccess();
-      navigate('/');
-    } catch (err: any) {
-      setError(err.message || 'Mock Google login failed');
     } finally {
       setLoading(false);
     }
@@ -122,18 +142,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         <div className="oauth-divider">OR</div>
 
-        <button
-          onClick={handleMockGoogleLogin}
-          className="btn btn-secondary"
-          style={{ width: '100%' }}
-          disabled={loading}
-        >
-          {/* Simple mock Google G icon */}
-          <svg style={{ width: '16px', height: '16px', fill: 'currentColor' }} viewBox="0 0 24 24">
-            <path d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-6.887 4.114-4.82 0-8.73-3.91-8.73-8.73s3.91-8.73 8.73-8.73c2.25 0 4.305.81 5.925 2.16l3.08-3.08C18.665 1.575 15.635.75 12.24.75 6.015.75 1 5.765 1 12s5.015 11.25 11.24 11.25c6.5 0 10.82-4.57 10.82-11.025 0-.74-.06-1.44-.19-2.07l-10.63.13z"/>
-          </svg>
-          Sign in with Google (OAuth Mock)
-        </button>
+        {/* Real Google OAuth Button container */}
+        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', minHeight: '40px', overflow: 'hidden', borderRadius: '4px' }} id="googleSignInButton"></div>
 
         <p className="auth-subtitle" style={{ textAlign: 'center', marginTop: '1.5rem' }}>
           Don't have an account?{' '}

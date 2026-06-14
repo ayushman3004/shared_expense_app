@@ -9,7 +9,7 @@ router.post('/login', login);
 router.post('/refresh', refresh);
 router.post('/logout', logout);
 router.get('/me', authenticate, me);
-router.post('/oauth-mock', oauthMock);
+router.post('/google', oauthMock);
 router.put('/profile', authenticate, updateProfile);
 router.delete('/profile', authenticate, deactivateAccount);
 
